@@ -1,57 +1,55 @@
-FROM nextcloud:31.0-apache
+ARG NEXTCLOUD_VERSION=REQUIRED
+FROM nextcloud:${NEXTCLOUD_VERSION}
 
+# ── Base packages ──────────────────────────────────────────────────────
 RUN set -ex; \
     \
     apt-get update; \
     apt-get install -y --no-install-recommends \
         ffmpeg \
         ghostscript \
-        # 2025-09-13 update dari https://help.nextcloud.com/t/problem-with-building-full-docker-image-from-example-nextcloud-31-0-8-apache/230628/7
-        # libmagickcore-6.q16-6-extra \
         libmagickcore-7.q16-10-extra \
         supervisor \
         nano \
     ; \
     rm -rf /var/lib/apt/lists/*
 
+# ── Build dependencies (untuk compile PHP extensions) ─────────────────
 RUN set -ex; \
     \
     apt-get update; \
     apt-get install -y --no-install-recommends \
         libbz2-dev \
-        # error. belum ketemu bisa ambil dari mana. ngaruh ke imap...
-        # libc-client-dev \
         libkrb5-dev \
         libsmbclient-dev \
-    ;
+    ; \
+    rm -rf /var/lib/apt/lists/*
 
+# ── PHP extensions ────────────────────────────────────────────────────
 RUN set -ex; \
     \
-    # error...
-    # docker-php-ext-configure imap --with-kerberos --with-imap-ssl; \
-    docker-php-ext-install \
-        bz2 \
-        # error...
-        # imap \
-    ; \
+    savedAptMark="$(apt-mark showmanual)"; \
+    \
+    docker-php-ext-install bz2; \
     pecl install smbclient; \
     docker-php-ext-enable smbclient; \
     \
     # reset apt-mark's "manual" list so that "purge --auto-remove" will remove all build dependencies
-    # apt-mark auto '.*' > /dev/null; \
-    # apt-mark manual $savedAptMark; \
-    # ldd "$(php -r 'echo ini_get("extension_dir");')"/*.so \
-    #     | awk '/=>/ { so = $(NF-1); if (index(so, "/usr/local/") == 1) { next }; gsub("^/(usr/)?", "", so); print so }' \
-    #     | sort -u \
-    #     | xargs -r dpkg-query --search \
-    #     | cut -d: -f1 \
-    #     | sort -u \
-    #     | xargs -rt apt-mark manual; \
-    # \
+    apt-mark auto '.*' > /dev/null; \
+    apt-mark manual $savedAptMark; \
+    ldd "$(php -r 'echo ini_get("extension_dir");')"/*.so \
+        | awk '/=>/ { so = $(NF-1); if (index(so, "/usr/local/") == 1) { next }; gsub("^/(usr/)?", "", so); print so }' \
+        | sort -u \
+        | xargs -r dpkg-query --search \
+        | cut -d: -f1 \
+        | sort -u \
+        | xargs -rt apt-mark manual; \
+    \
     apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false \
     ; \
     rm -rf /var/lib/apt/lists/*
 
+# ── Supervisor ────────────────────────────────────────────────────────
 RUN mkdir -p \
     /var/log/supervisord \
     /var/run/supervisord \
@@ -59,6 +57,7 @@ RUN mkdir -p \
 
 COPY supervisor/supervisord.conf /
 
+# ── Apache + SSL ──────────────────────────────────────────────────────
 RUN mkdir -p \
     /etc/apache2/ssl \
     ; \
