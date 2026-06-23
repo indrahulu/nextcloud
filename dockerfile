@@ -1,6 +1,13 @@
 ARG NEXTCLOUD_VERSION=REQUIRED
 FROM nextcloud:${NEXTCLOUD_VERSION}
 
+# ── Timezone (Asia/Jakarta, GMT+07) ───────────────────────────────────
+ENV TZ=Asia/Jakarta
+RUN set -ex; \
+    \
+    ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
+    && echo $TZ > /etc/timezone
+
 # ── Base packages ──────────────────────────────────────────────────────
 RUN set -ex; \
     \
@@ -11,6 +18,7 @@ RUN set -ex; \
         libmagickcore-7.q16-10-extra \
         supervisor \
         nano \
+        tzdata \
     ; \
     rm -rf /var/lib/apt/lists/*
 
